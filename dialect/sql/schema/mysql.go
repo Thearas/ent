@@ -264,7 +264,9 @@ func (d *MySQL) cType(c *Column) (t string) {
 		// In MariaDB or in MySQL < v8.0.2, the TIMESTAMP column has both `DEFAULT CURRENT_TIMESTAMP`
 		// and `ON UPDATE CURRENT_TIMESTAMP` if neither is specified explicitly. this behavior is
 		// suppressed if the column is defined with a `DEFAULT` clause or with the `NULL` attribute.
-		if _, maria := d.mariadb(); maria || compareVersions(d.version, "8.0.2") == -1 && c.Default == nil {
+		_, tidb := d.tidb()
+		_, maria := d.mariadb()
+		if !tidb && (maria || compareVersions(d.version, "8.0.2") == -1 && c.Default == nil) {
 			c.Nullable = c.Attr == ""
 		}
 	case field.TypeEnum:
@@ -661,6 +663,15 @@ func (d *MySQL) normalizeJSON(ctx context.Context, tx dialect.Tx, t *Table) erro
 // mariadb reports if the migration runs on MariaDB and returns the semver string.
 func (d *MySQL) mariadb() (string, bool) {
 	idx := strings.Index(d.version, "MariaDB")
+	if idx == -1 {
+		return "", false
+	}
+	return d.version[:idx-1], true
+}
+
+// tidb reports if the migration runs on TiDB and returns the semver string.
+func (d *MySQL) tidb() (string, bool) {
+	idx := strings.Index(d.version, "TiDB")
 	if idx == -1 {
 		return "", false
 	}
