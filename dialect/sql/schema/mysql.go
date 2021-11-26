@@ -600,6 +600,10 @@ func (d *MySQL) tables() sql.Querier {
 
 // alterColumns returns the queries for applying the columns change-set.
 func (d *MySQL) alterColumns(table string, add, modify, drop []*Column) sql.Queries {
+	if _, tidb := d.tidb(); tidb {
+		return d.alterColumnsForTiDB(table, add, modify, drop)
+	}
+
 	b := sql.Dialect(dialect.MySQL).AlterTable(table)
 	for _, c := range add {
 		b.AddColumn(d.addColumn(c))
@@ -614,6 +618,23 @@ func (d *MySQL) alterColumns(table string, add, modify, drop []*Column) sql.Quer
 		return nil
 	}
 	return sql.Queries{b}
+}
+
+// alterColumnsForTiDB is yet another version of alterColumns just for TiDB.
+// Because TiDB lacks the support of multi schema change. :(
+// Related issue: <https://github.com/pingcap/tidb/issues/14766>.
+func (d *MySQL) alterColumnsForTiDB(table string, add, modify, drop []*Column) (queries sql.Queries) {
+	b := sql.Dialect(dialect.MySQL)
+	for _, c := range add {
+		queries = append(queries, b.AlterTable(table).AddColumn(d.addColumn(c)))
+	}
+	for _, c := range modify {
+		queries = append(queries, b.AlterTable(table).ModifyColumn(d.addColumn(c)))
+	}
+	for _, c := range drop {
+		queries = append(queries, b.AlterTable(table).DropColumn(sql.Dialect(dialect.MySQL).Column(c.Name)))
+	}
+	return queries
 }
 
 // normalizeJSON normalize MariaDB longtext columns to type JSON.
